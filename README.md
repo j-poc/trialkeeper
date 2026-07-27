@@ -134,4 +134,15 @@ Every simulation is seeded. A failure is reproducible, not occasional.
 - Harvey, Liu & Zhu (2016), *…and the Cross-Section of Expected Returns* — multiple-testing haircuts
 - Benjamini & Yekutieli (2001) — FDR control under arbitrary dependence
 
+## Where this lives
+
+Developed inside [ALETHEIA](https://github.com/j-poc/aletheia), a point-in-time
+evidence engine, and mirrored here as a standalone package. The monorepo is the
+source of truth; this repository is a subtree split of `packages/trialkeeper`, so
+its history is the real history rather than a squashed import.
+
+The boundary is enforced rather than asserted: the test suite runs with **zero**
+imports from `aletheia.*`, which is what makes the split honest instead of
+aspirational.
+
 MIT licensed.
