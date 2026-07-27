@@ -19,6 +19,15 @@ Three adjustments, in increasing order of power:
 :func:`sharpe_haircut` converts an adjusted p-value back into the Sharpe ratio
 you are entitled to claim. That is the number to put in a memo — the raw one
 describes a search, not a strategy.
+
+**What this is not.** Harvey, Liu & Zhu is cited above for the argument, not the
+algorithm. Their published haircut is a specific bootstrap calibrated to the
+observed t-statistic distribution of the factor zoo, including an estimate of the
+factors that were tried and never published. This module implements the standard
+corrections directly — Bonferroni, Holm, BHY — against a trial count *you* supply
+from the pre-registration ledger. That is a weaker and more transparent claim: it
+is only as honest as your own trial count, and it does not attempt to infer the
+unpublished tests of an entire literature.
 """
 
 from __future__ import annotations

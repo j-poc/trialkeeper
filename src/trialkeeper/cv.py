@@ -8,10 +8,14 @@ set — the model scores well and the strategy fails live.
 Two corrections, from López de Prado's *Advances in Financial Machine Learning*:
 
 * **Purging** — drop training observations whose label window overlaps any test
-  observation's label window.
+  observation's label window, on *either* side of the test block. Overlap is
+  symmetric; a label reaching backwards into the test set leaks exactly as much
+  as one reaching forwards out of it.
 * **Embargo** — additionally drop training observations immediately *after* the
   test set, because serial correlation leaks in that direction even without
-  overlap.
+  overlap. This is a margin *beyond* the purge, not the mechanism that handles
+  the forward direction — purging already covers overlap both ways, so a correct
+  ``embargo=0`` run leaks nothing.
 
 :func:`combinatorial_purged_splits` extends this to CPCV: instead of one path
 through the data, test on every combination of ``k`` groups, producing many
@@ -37,9 +41,13 @@ class Split:
     train: NDArray[np.int64]
     test: NDArray[np.int64]
     purged: int
-    """Training observations removed for overlapping the test labels."""
+    """Training observations removed for overlapping the test labels, either side."""
     embargoed: int
-    """Training observations removed for sitting just after the test set."""
+    """Training observations removed by the embargo *alone*.
+
+    Rows the purge had already taken are not counted again here, so an embargo
+    shorter than the label horizon reports 0 — it genuinely added nothing.
+    """
 
     @property
     def train_size(self) -> int:
@@ -125,20 +133,38 @@ def _build_split(
     purged = np.zeros(indices.size, dtype=bool)
     embargoed = np.zeros(indices.size, dtype=bool)
     for position in test_set:
-        # Purge backwards: a training label starting up to `label_horizon` before
-        # a test observation still overlaps it.
+        # Purge in BOTH directions. Overlap is a symmetric relation: with a label
+        # window of `[i, i + label_horizon)`, observations i and p overlap
+        # whenever `abs(i - p) < label_horizon`, and it makes no difference which
+        # of the two came first. An earlier version purged only backwards and
+        # left the forward side to `embargo` -- which defaults to 0, so on the
+        # default configuration training rows immediately after a test block kept
+        # their overlap and leaked. The first fold showed it most clearly: its
+        # test block starts at index 0, so the backward pass had nothing to
+        # remove and reported `purged=0` while four rows leaked forward.
+        #
+        # The window below is `[p - h, p + h]`, one wider on each side than the
+        # strict `abs(i - p) < h` rule. That is deliberate and it is what the
+        # backward pass already did: it treats a label as touching both of its
+        # endpoints, which is the right reading when the label is a return
+        # measured from the price at `i` to the price at `i + h`.
         low = max(0, int(position) - label_horizon)
-        purged[low : int(position)] = True
+        high = min(indices.size, int(position) + label_horizon + 1)
+        purged[low:high] = True
         # Embargo forwards: serial correlation leaks into the immediate future
         # even where label windows do not overlap.
-        high = min(indices.size, int(position) + 1 + embargo)
-        embargoed[int(position) + 1 : high] = True
+        edge = min(indices.size, int(position) + 1 + embargo)
+        embargoed[int(position) + 1 : edge] = True
 
     removed = (purged | embargoed) & ~blocked
     train = indices[~blocked & ~removed]
+    # Purge is primary and the embargo is the additional margin beyond it, so the
+    # counts are reported that way: `embargoed` is rows dropped for the embargo
+    # ALONE. An embargo smaller than the label horizon therefore reports 0, which
+    # is the honest answer -- it removed nothing the purge had not already taken.
     return Split(
         train=train,
         test=test_set,
-        purged=int((purged & ~blocked & ~embargoed).sum()),
-        embargoed=int((embargoed & ~blocked).sum()),
+        purged=int((purged & ~blocked).sum()),
+        embargoed=int((embargoed & ~blocked & ~purged).sum()),
     )

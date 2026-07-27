@@ -129,6 +129,56 @@ class TestPurgedKFold:
         assert leaked == []
         assert middle.embargoed > 0
 
+    def test_labels_after_the_test_block_are_purged_too(self) -> None:
+        """The direction the first version of this module missed.
+
+        Overlap is symmetric: if a training label window reaches into the test
+        block, it leaks regardless of which side it sits on. The original purge
+        only looked backwards and left the forward side to ``embargo``, which
+        defaults to 0 -- so the documented guarantee ("any test observation's
+        label window") did not hold on the default configuration.
+
+        The first fold is the sharpest case: its test block starts at index 0,
+        so there is no history to purge and the backward pass removes literally
+        nothing, while training rows immediately after the block still overlap.
+        """
+        first = next(iter(purged_kfold(100, n_splits=5, label_horizon=5, embargo=0)))
+        last_test = int(first.test.max())
+        leaked = [index for index in first.train if last_test < index < last_test + 5]
+        assert leaked == [], f"training rows {leaked} overlap the test labels"
+
+    def test_no_training_label_window_overlaps_any_test_label_window(self) -> None:
+        """The guarantee stated as the docstring states it, checked directly.
+
+        Rather than probing one boundary, this recomputes the overlap relation
+        from the definition -- label window ``[i, i + horizon)`` -- over every
+        fold and asserts the intersection is empty. A boundary-specific test
+        passes when only one side is implemented; this one cannot.
+        """
+        horizon = 5
+        for split in purged_kfold(100, n_splits=5, label_horizon=horizon, embargo=0):
+            test_set = split.test.tolist()
+            leaked = [
+                index
+                for index in split.train.tolist()
+                if any(abs(int(index) - int(position)) < horizon for position in test_set)
+            ]
+            assert leaked == [], f"training rows {leaked} overlap test {test_set[:3]}..."
+
+    def test_combinatorial_splits_purge_forward_as_well(self) -> None:
+        """Same hole, checked on the CPCV path that the flagship study would use."""
+        horizon = 10
+        for split in combinatorial_purged_splits(
+            600, n_groups=6, n_test_groups=2, label_horizon=horizon
+        ):
+            test_set = set(split.test.tolist())
+            leaked = [
+                index
+                for index in split.train.tolist()
+                if any(abs(int(index) - int(position)) < horizon for position in test_set)
+            ]
+            assert leaked == [], f"training rows {leaked[:5]} overlap the test labels"
+
     def test_folds_are_contiguous_in_time(self) -> None:
         """Shuffling a time series trains on the future by construction."""
         for split in purged_kfold(100, n_splits=5):
