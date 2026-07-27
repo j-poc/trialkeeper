@@ -179,6 +179,32 @@ class TestPurgedKFold:
             ]
             assert leaked == [], f"training rows {leaked[:5]} overlap the test labels"
 
+    def test_the_conservative_purge_margin_is_pinned(self) -> None:
+        """Pins the *convention*, not the safety guarantee.
+
+        The tests above assert the load-bearing invariant: no training label
+        window overlaps a test label window. A strictly minimal purge window of
+        ``[p - h + 1, p + h - 1]`` also satisfies that, so those tests cannot
+        tell the two apart -- and D16 records the wider ``[p - h, p + h]`` as a
+        deliberate choice, on the reading that a label measured from the price
+        at ``i`` to the price at ``i + h`` touches both endpoints.
+
+        A documented choice that nothing enforces is not a choice, it is a
+        comment. This asserts the exact counts, so narrowing the margin back to
+        the strict minimum fails here instead of passing silently. Costs 1 row
+        per edge fold and 2 per interior fold, independent of horizon and size.
+        """
+        horizon = 5
+        counts = [
+            split.purged
+            for split in purged_kfold(100, n_splits=5, label_horizon=horizon, embargo=0)
+        ]
+        # Edge folds purge on one side only; interior folds on both.
+        assert counts == [5, 10, 10, 10, 5], (
+            f"purge margin changed: {counts}. The strictly minimal window would "
+            f"give [4, 8, 8, 8, 4]. If narrowing is intended, update D16 too."
+        )
+
     def test_folds_are_contiguous_in_time(self) -> None:
         """Shuffling a time series trains on the future by construction."""
         for split in purged_kfold(100, n_splits=5):
