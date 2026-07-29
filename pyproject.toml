@@ -24,3 +24,17 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trialkeeper"]
+
+# Everything below exists so this package is testable *on its own*. Inside the
+# monorepo the workspace root supplies pytest and its configuration, which made
+# the suite pass here while a fresh clone of the published repository could not
+# even collect it -- `uv run pytest` fell back to a pytest outside the project
+# environment and `trialkeeper` was not importable. The library is published
+# standalone, so its own file has to carry this.
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error"]

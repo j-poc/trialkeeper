@@ -21,8 +21,18 @@ A 1.41 Sharpe from pure noise. Not a bug, not unlucky data — the arithmetic of
 
 ## Install
 
+Not on PyPI yet, so install from the repository. Runtime dependencies are numpy
+and scipy, nothing else.
+
 ```bash
-pip install trialkeeper     # numpy + scipy, nothing else
+pip install git+https://github.com/j-poc/trialkeeper.git
+```
+
+To run the tests, clone it and use the `dev` group:
+
+```bash
+git clone https://github.com/j-poc/trialkeeper.git && cd trialkeeper
+uv run --group dev pytest        # or: pip install -e . pytest && pytest
 ```
 
 ## The four tools
